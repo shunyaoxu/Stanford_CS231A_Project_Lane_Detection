@@ -109,7 +109,7 @@ def RANSAC_VP(lines):
 
     lines=np.array(lines)
     p=0.99
-    e_guess=0.8
+    e_guess=0.9
     s=2
     n=math.log(1-p)/math.log(1-(1-e_guess)**s)
     #n=min([math.ceil(n),np.shape(lines)[0]])
@@ -152,3 +152,8 @@ def RANSAC_VP(lines):
     #if(n_new > n):
 
     return point_max
+
+def Angle_btw_vect(vec1, vec2):
+    vec1/=np.linalg.norm(vec1)
+    vec2 /= np.linalg.norm(vec2)
+    return np.arccos(np.dot(vec1,vec2))
