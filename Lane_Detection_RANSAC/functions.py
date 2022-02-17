@@ -1,5 +1,6 @@
 import numpy as np
-
+import math
+import random
 # Convolution
 def convolution(img, kernel):
     img_H, img_W = img.shape
@@ -79,5 +80,75 @@ def ROI(edges):
     return roi_img
 
 # RANSAC
-def RANSAC(img):
-    
+# def RANSAC(img):
+
+
+# helper function for performing Ransac common intersection
+#convert a line in the form of (x1,y1) ( x2, y2) to ax+by+c=0
+def convert_homogenous_line(line):
+
+    line=np.array(line)
+    dx=line[2]-line[0]
+    dy=line[3]-line[1]
+    newline=np.zeros(3)
+    newline[0]=-dy
+    newline[1]= dx
+    newline/=np.linalg.norm(newline)
+    newline[2]= - (line[0]*newline[0]+line[1]*newline[1])
+
+    return newline
+# line point distance line in the form ax+by+c=0, point in the form (x,y) ot (x,y,1)
+
+
+def line_dist(line, point):
+    return abs(line[0]*point[0]+line[1]*point[1]+line[2])
+
+
+
+def RANSAC_VP(lines):
+
+    lines=np.array(lines)
+    p=0.99
+    e_guess=0.8
+    s=2
+    n=math.log(1-p)/math.log(1-(1-e_guess)**s)
+    #n=min([math.ceil(n),np.shape(lines)[0]])
+    e_max=0
+    point_max= np.zeros([2])
+    n=math.ceil(n)
+    #print('dbg0')
+    #print(n)
+    for i in range(n):
+        line1 = lines[random.randint(0,np.shape(lines)[0]-1),0,:]
+        line2 = lines[random.randint(0,np.shape(lines)[0]-1),0,:]
+        line1=convert_homogenous_line(line1)
+        line2 = convert_homogenous_line(line2)
+        curr_intersection= np.cross(line1, line2)
+        if(curr_intersection[-1]<10**(-10)):
+            continue
+        curr_intersection/=curr_intersection[-1]
+        inlier=0
+        #print('curr_intersection')
+        #print(curr_intersection)
+        for line in lines:
+            line=convert_homogenous_line(line[0])
+            #print('dbg2')
+            #if(line.all()==line1.all() or line.all()==line2.all()):
+            #    continue
+            if(abs(line_dist(line, curr_intersection))< 10):
+                inlier+=1
+                #print('dbg3')
+
+        curr_e=inlier/np.shape(lines)[0]
+
+        if(curr_e>e_max):
+            #print('dbg4')
+            e_max=curr_e
+            point_max=curr_intersection.copy()
+            #print('dbg')
+            #print(e_max)
+
+    #n_new= math.log(1-p)/math.log(1-(1-e_max)**s)
+    #if(n_new > n):
+
+    return point_max
