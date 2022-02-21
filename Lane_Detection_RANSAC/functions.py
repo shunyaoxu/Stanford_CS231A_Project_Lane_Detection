@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import random
+
 # Convolution
 def convolution(img, kernel):
     img_H, img_W = img.shape
@@ -67,9 +68,50 @@ def NMS(img, kernel_size, sigma):
                 if G_pad[i,j] >= G_pad[i,j-1] and G_pad[i,j] >= G_pad[i,j+1]:
                     output[i-1,j-1] = G_pad[i,j]
     return output
+
+# Double Threshold
+def double_threshold(img, kernel_size, sigma, high, low):
+    # Smoothing, Gradient, and NMS
+    NMS_image = NMS(img, kernel_size, sigma)
     
+    # Double Threshold
+    strong_edges = np.zeros(NMS_image.shape, dtype=np.bool)
+    weak_edges = np.zeros(NMS_image.shape, dtype=np.bool)
+    strong_edges = NMS_image > high
+    weak_edges = (NMS_image > low) & (NMS_image <= high)
+    return strong_edges, weak_edges
+
+# Extract Useful Weak Edges (we might or might not use this)
+def get_neighbors(y, x, H, W):
+    neighbors = []
+    for i in (y-1, y, y+1):
+        for j in (x-1, x, x+1):
+            if i >= 0 and i < H and j >= 0 and j < W:
+                if (i == y and j == x):
+                    continue
+                neighbors.append((i, j))
+    return neighbors
+
+def link_edges(img, kernel_size, sigma, high, low):
+    # Smoothing, Gradient, NMS, and double threshold
+    strong_edges, weak_edges = double_threshold(img, kernel_size, sigma, high, low)
+    
+    # Extract Useful Weak Edges
+    H, W = strong_edges.shape
+    indicesStrEdg = np.stack(np.nonzero(strong_edges)).T # get coordinates of all strong edge pixels in shape (n,2)
+    while len(indicesStrEdg) != 0:
+        y, x = indicesStrEdg[0]
+        indicesStrEdg = np.delete(indicesStrEdg, 0, axis=0)
+        neighbors = get_neighbors(y, x, H, W)
+        for m, n in neighbors:
+            if weak_edges[m,n]:
+                if not strong_edges[m,n] == True:
+                    strong_edges[m,n] = True
+                    indicesStrEdg = np.vstack((indicesStrEdg, (m,n)))
+    return strong_edges
+
 # Extract Region of Interest
-def ROI(edges):
+def ROI_Triangle(edges):
     H, W = edges.shape
     mask = np.zeros((H, W))
     for i in range(H):
@@ -79,9 +121,46 @@ def ROI(edges):
     roi_img = edges * mask
     return roi_img
 
-# RANSAC
-# def RANSAC(img):
+def ROI_Half(edges):
+    H, W = edges.shape
+    mask = np.zeros((H, W))
+    for i in range(H):
+        for j in range(W):
+            if i > H // 2:
+                mask[i, j] = 1
+    roi_img = edges * mask
+    return roi_img
 
+# Hough Transform
+def hough(img):
+    """ 
+    Use the parameterization:
+        rho = x * cos(theta) + y * sin(theta)
+    to transform a point (x,y) to a sine-like function in Hough space.
+    """
+    # Set rho and theta ranges
+    W, H = img.shape
+    diag_len = int(np.ceil(np.sqrt(W * W + H * H)))
+    rhos = np.linspace(-diag_len, diag_len, diag_len * 2 + 1)
+    thetas = np.deg2rad(np.arange(-90.0, 90.0))
+    cos_t = np.cos(thetas)
+    sin_t = np.sin(thetas)
+    num_thetas = len(thetas)
+
+    # Initialize Hough space
+    hough_space = np.zeros((2 * diag_len + 1, num_thetas), dtype=np.uint64)
+
+    # Transform each point (y, x) in image to sin-like curve in Hough Space
+    # Find rho corresponding to values in thetas and increment the Hough Space
+    ys, xs = np.nonzero(img)
+    for y,x in zip(ys,xs):
+        for i in range(num_thetas):
+            rho = x*cos_t[i] + y*sin_t[i]
+            rho = round(rho)
+            j = np.abs(rhos-rho).argmin()
+            hough_space[j,i] += 1
+    return hough_space, rhos, thetas
+    
 
 # helper function for performing Ransac common intersection
 #convert a line in the form of (x1,y1) ( x2, y2) to ax+by+c=0
