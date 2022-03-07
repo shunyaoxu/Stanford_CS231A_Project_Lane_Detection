@@ -187,6 +187,8 @@ def line_dist(line, point):
 def RANSAC_VP(lines,height_lower=None, height_upper=None):
 
     lines=np.array(lines)
+    if lines.shape[0]<2:
+        return np.zeros([2])
     p=0.99
     e_guess=0.9
     s=2
