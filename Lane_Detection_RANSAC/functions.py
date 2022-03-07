@@ -184,7 +184,7 @@ def line_dist(line, point):
 
 
 
-def RANSAC_VP(lines,height_lower=None, height_upper=None):
+def RANSAC_VP(lines,height_lower=None, height_upper=None,width_lower=None, width_upper=None):
 
     lines=np.array(lines)
     if lines.shape[0]<2:
@@ -228,6 +228,12 @@ def RANSAC_VP(lines,height_lower=None, height_upper=None):
                     continue
             if height_upper is not None:
                 if curr_intersection[1] > height_upper:
+                    continue
+            if width_lower is not None:
+                if curr_intersection[0]<width_lower:
+                    continue
+            if width_upper is not None:
+                if curr_intersection[0] > width_upper:
                     continue
             #print('dbg4')
             e_max=curr_e
