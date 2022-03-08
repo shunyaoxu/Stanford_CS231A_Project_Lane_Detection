@@ -222,7 +222,7 @@ def RANSAC_VP(lines,height_lower=None, height_upper=None,width_lower=None, width
 
         curr_e=inlier/np.shape(lines)[0]
 
-        if(curr_e>e_max ):
+        if(curr_e>e_max and inlier>1 ):
             if height_lower is not None:
                 if curr_intersection[1]<height_lower:
                     continue
