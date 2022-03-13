@@ -110,6 +110,9 @@ def link_edges(img, kernel_size, sigma, high, low):
                     indicesStrEdg = np.vstack((indicesStrEdg, (m,n)))
     return strong_edges
 
+def canny_edge_detector(img, kernel_size, sigma, high, low):
+    return link_edges(img, kernel_size, sigma, high, low)
+
 # Extract Region of Interest
 def ROI_Triangle(edges):
     H, W = edges.shape
@@ -132,7 +135,7 @@ def ROI_Half(edges):
     return roi_img
 
 # Hough Transform
-def hough(img):
+def hough(img, numLinesToFind = 2, onlyLeftAndRight = True):
     """ 
     Use the parameterization:
         rho = x * cos(theta) + y * sin(theta)
@@ -155,11 +158,121 @@ def hough(img):
     ys, xs = np.nonzero(img)
     for y,x in zip(ys,xs):
         for i in range(num_thetas):
-            rho = x*cos_t[i] + y*sin_t[i]
+            rho = x * cos_t[i] + y * sin_t[i]
             rho = round(rho)
             j = np.abs(rhos-rho).argmin()
             hough_space[j,i] += 1
-    return hough_space, rhos, thetas
+    
+    if onlyLeftAndRight:
+        left  = False
+        right = False
+        # Find the peak points in Hough Space
+        while not left or not right:
+            # Find peak point
+            idx   = np.argmax(hough_space)
+            r_idx = idx // hough_space.shape[1] # Calculate rho-coordinate
+            t_idx = idx % hough_space.shape[1]  # Calculate theta-coordinate
+            hough_space[r_idx, t_idx] = 0       # Zero out the max value in hough space
+    
+            # Transform a point in Hough space to a line in xy-space.
+            rho   = rhos[r_idx]
+            theta = thetas[t_idx]
+            a = - (np.cos(theta) / np.sin(theta)) # slope of the line
+            b = (rho / np.sin(theta)) # y-intersect of the line
+
+            # Break if both right and left lanes are detected
+            if left and right: # Both Lanes Detected
+                break
+            if a < -0.2: # Left lane detected
+                if left:
+                    continue
+                left    = True
+                a_left  = a
+                b_left  = b
+                y1_left = img.shape[0]                 # Point 1 y
+                x1_left = (y1_left - b_left) / a_left  # Point 1 x
+                y2_left = img.shape[0] * 0.55          # Point 2 y
+                x2_left = (y2_left - b_left) / a_left  # Point 2 x
+            elif a > 0.2: # Right Lane detected
+                if right:
+                    continue
+                right    = True
+                a_right  = a
+                b_right  = b
+                y1_right = img.shape[0] * 0.55              # Point 1 y
+                x1_right = (y1_right - b_right) / a_right  # Point 1 x
+                y2_right = img.shape[0]                    # Point 2 y
+                x2_right = (y2_right - b_right) / a_right  # Point 2 x
+        x_VP = (b_right - b_left) / (a_left - a_right)
+        y_VP = x_VP * a_left + b_left
+        VP   = [x_VP, y_VP, 1.]
+        leftLane  = [[int(round(x1_left)), int(round(y1_left))], [int(round(x2_left)), int(round(y2_left))]]
+        rightLane = [[int(round(x1_right)), int(round(y1_right))], [int(round(x2_right)), int(round(y2_right))]]
+        return VP, leftLane, rightLane
+    else:
+        lines = []
+        left     = False
+        right    = False
+        numLeft  = 0
+        numRight = 0
+        # Find the peak points in Hough Space
+        while len(lines) < numLinesToFind or not left or not right:
+            # Find peak point
+            idx = np.argmax(hough_space)
+            r_idx = idx // hough_space.shape[1] # Calculate rho-coordinate
+            t_idx = idx % hough_space.shape[1]  # Calculate theta-coordinate
+            hough_space[r_idx, t_idx] = 0       # Zero out the max value in hough space
+    
+            # Transform a point in Hough space to a line in xy-space.
+            rho = rhos[r_idx]
+            theta = thetas[t_idx]
+            if np.sin(theta) == 0:
+                continue
+            a = - (np.cos(theta) / np.sin(theta)) # slope of the line
+            b = (rho / np.sin(theta)) # y-intersect of the line
+            
+            if a < -0.25:
+                numLeft += 1
+                y1 = img.shape[0]        # Point 1 y
+                x1 = (y1 - b) / a        # Point 1 x
+                y2 = 0                   # Point 2 y
+                x2 = (y2 - b) / a        # Point 2 x
+                lines.append([x1, y1, x2, y2])
+                if left:
+                    continue
+                else:
+                    left = True
+                    a_left  = a
+                    b_left  = b
+                    y1_left = y1
+                    x1_left = x1
+                    y2_left = img.shape[0] * 0.45
+                    x2_left = (y2_left - b_left) / a_left
+            elif a > 0.25:
+                numRight += 1
+                y1 = img.shape[0]        # Point 1 y
+                x1 = (y1 - b) / a        # Point 1 x
+                y2 = 0                   # Point 2 y
+                x2 = (y2 - b) / a        # Point 2 x
+                lines.append([x1, y1, x2, y2])
+                if right:
+                    continue
+                else:
+                    right = True
+                    a_right  = a
+                    b_right  = b
+                    y1_right = y1
+                    x1_right = x1
+                    y2_right = img.shape[0] * 0.45
+                    x2_right = (y2_right - b_right) / a_right
+                    
+        lines = np.array(lines).reshape(-1,1,4)
+        leftLane  = [[int(round(x1_left)), int(round(y1_left))], [int(round(x2_left)), int(round(y2_left))]]
+        rightLane = [[int(round(x1_right)), int(round(y1_right))], [int(round(x2_right)), int(round(y2_right))]]
+        x_VP   = (b_right - b_left) / (a_left - a_right)
+        y_VP   = x_VP * a_left + b_left
+        VP_est = [x_VP, y_VP, 1.]
+        return VP_est, leftLane, rightLane, lines, numLeft, numRight
     
 
 # helper function for performing Ransac common intersection
